@@ -12,7 +12,9 @@ from keras.engine.topology import get_source_inputs
 
 from Resnet_models.oct_conv2d import *
 
-def identity_block(input_tensor, alpha, kernel_size, filters, stage, block):
+import tensorflow as tf
+
+def identity_block(input_tensor, alpha, kernel_size, filters, stage, block, strides = (1,1)):
     
     filters1, filters2 = filters
     if K.image_data_format() == 'channels_last':
@@ -25,29 +27,17 @@ def identity_block(input_tensor, alpha, kernel_size, filters, stage, block):
     low_conv_bn_name_base = 'bn' + str(stage) + block + 'low_conv_branch'
 
     high, low = input_tensor
-
     skip_high, skip_low = input_tensor
- 
-    #x = Conv2D(filters1, kernel_size, padding = 'same', name=conv_name_base + '2a')(input_tensor)   # padding='same ??? kernel_initializer='he_normal'???
-    #x = BatchNormalization(axis=bn_axis, name=bn_name_base + '2a')(x)
-    #x = Activation('relu')(x)
-    high, low = OctConv2D(filters1, alpha, kernel_size = kernel_size, padding = 'same', name = conv_name_base + '2a')([high, low])
+
+    high, low = OctConv2D(filters1, alpha, kernel_size = kernel_size, strides = strides, padding = 'same', name = conv_name_base + '2a')([high, low])
     high = BatchNormalization(axis=bn_axis, name = high_conv_bn_name_base + '2a')(high)
     high = Activation('relu')(high)
     low = BatchNormalization(axis=bn_axis, name = low_conv_bn_name_base + '2a')(low)
     low = Activation('relu')(low)
 
-    
-    # x = Conv2D(filters2, kernel_size,
-    #            padding='same', name=conv_name_base + '2b')(x)
-    # x = BatchNormalization(axis=bn_axis, name=bn_name_base + '2b')(x)
-
     high, low = OctConv2D(filters2, alpha, kernel_size = kernel_size, padding = 'same', name = conv_name_base + '2b')([high, low])
     high = BatchNormalization(axis=bn_axis, name = high_conv_bn_name_base + '2b')(high)
     low = BatchNormalization(axis=bn_axis, name = low_conv_bn_name_base + '2b')(low)
-
-    # x = add([x, input_tensor])
-    # x = Activation('relu')(x)
 
     high = add([high, skip_high])
     low = add([low, skip_low])
@@ -57,15 +47,13 @@ def identity_block(input_tensor, alpha, kernel_size, filters, stage, block):
 
     return [high, low]
 
-def conv_block(input_tensor, alpha, kernel_size, filters, stage, block, strides=(2, 2)):
+def conv_block(input_tensor, alpha, kernel_size, filters, stage, block, strides=(1, 1)):
     
     filters1, filters2 = filters
     if K.image_data_format() == 'channels_last':
         bn_axis = 3
     else:
         bn_axis = 1
-    # conv_name_base = 'res' + str(stage) + block + '_branch'
-    # bn_name_base = 'bn' + str(stage) + block + '_branch'
 
     conv_name_base = 'res' + str(stage) + block + 'conv_branch'
     high_conv_bn_name_base = 'bn' + str(stage) + block + 'high_conv_branch'
@@ -74,36 +62,22 @@ def conv_block(input_tensor, alpha, kernel_size, filters, stage, block, strides=
     high, low = input_tensor
     skip_high, skip_low = input_tensor
  
-    # x = Conv2D(filters1, kernel_size, strides=strides, padding = 'same',                        # padding='same' ???
-    #            name=conv_name_base + '2a')(input_tensor)
-    # x = BatchNormalization(axis=bn_axis, name=bn_name_base + '2a')(x)
-    # x = Activation('relu')(x)
-
     high, low = OctConv2D(filters1, alpha, kernel_size = kernel_size, padding = 'same', strides= strides, name = conv_name_base + '2a')([high, low])
     high = BatchNormalization(axis=bn_axis, name = high_conv_bn_name_base + '2a')(high)
     high = Activation('relu')(high)
     low = BatchNormalization(axis=bn_axis, name = low_conv_bn_name_base + '2a')(low)
     low = Activation('relu')(low)
 
-    # x = Conv2D(filters2, kernel_size, padding='same',
-    #            name=conv_name_base + '2b')(x)
-    # x = BatchNormalization(axis=bn_axis, name=bn_name_base + '2b')(x)
-
     high, low = OctConv2D(filters2, alpha, kernel_size = kernel_size, padding = 'same', name = conv_name_base + '2b')([high, low])
     high = BatchNormalization(axis=bn_axis, name = high_conv_bn_name_base + '2b')(high)
     low = BatchNormalization(axis=bn_axis, name = low_conv_bn_name_base + '2b')(low)
-    
-    # shortcut = Conv2D(filters2, (1, 1), strides=strides, name=conv_name_base + '1')(input_tensor)
-    # shortcut = BatchNormalization(axis=bn_axis, name=bn_name_base + '1')(shortcut)
-
-    skip_high = Conv2D(int(filters2 * (1 - alpha)), (1, 1), strides=strides, name = conv_name_base + '1')(skip_high)
+ 
+    skip_high = Conv2D(int(filters2 * (1 - alpha)), kernel_size = kernel_size, strides=strides, padding = 'same', name = conv_name_base + '1')(skip_high)
     skip_high = BatchNormalization(axis=bn_axis, name = high_conv_bn_name_base + '1')(skip_high)
 
-    skip_low = Conv2D(int(filters2 * alpha), (1, 1), strides=strides, name = conv_name_base + '2')(skip_low)
+    skip_low = Conv2D(int(filters2 * alpha), kernel_size = kernel_size, strides=strides, padding = 'same', name = conv_name_base + '2')(skip_low)
     skip_low = BatchNormalization(axis=bn_axis, name = low_conv_bn_name_base + '2')(skip_low)
- 
-    # x = add([x, shortcut])
-    # x = Activation('relu')(x)
+
     high = add([high, skip_high])
     low = add([low, skip_low])
 
@@ -122,7 +96,7 @@ def last_OctConv_2_Vanila(input_tensor, filters, alpha):
     high, low = input_tensor
 
     high_2_high = Conv2D(filters, (3, 3), padding = 'same')(high)
-    low_2_high = Conv2D(filters, 3, padding="same")(low)
+    low_2_high = Conv2D(filters, (3, 3), padding="same")(low)
     low_2_high = Lambda(lambda x: 
                         K.repeat_elements(K.repeat_elements(x, 2, axis=1), 2, axis=2))(low_2_high)
     
@@ -167,12 +141,7 @@ def Oct_ResNet18(include_top = False,
     else:
         bn_axis = 1
  
-    #x = Conv2D(64, (7, 7), strides=(2, 2), name='conv1')(img_input)
-    #x = BatchNormalization(axis=bn_axis, name='bn_conv1')(x)
-    #x = Activation('relu')(x)
-    #x = MaxPooling2D((3, 3), strides=(2, 2))(x)
-    
-    low = AveragePooling2D()(img_input)
+    low = AveragePooling2D(2)(img_input)
 
     high, low = OctConv2D(64, alpha = alpha, kernel_size = (7, 7), strides = (2, 2))([img_input, low])
     
@@ -182,27 +151,16 @@ def Oct_ResNet18(include_top = False,
     low = BatchNormalization(axis=bn_axis, name='low_Oct_bn_conv1')(low)
     low = Activation("relu")(low)
 
-    # x = conv_block(x, 3, [64, 64], stage=2, block='a', strides=(1, 1))
-    # x = identity_block(x, 3, [64, 64], stage=2, block='b')
-    high, low = conv_block([high, low], alpha = alpha, kernel_size = (3 , 3), filters = [64, 64], stage = 2, block = 'a', strides = (1, 1))
+    high, low = conv_block([high, low], alpha = alpha, kernel_size = (3 , 3), filters = [64, 64], stage = 2, block = 'a')
     high, low = identity_block([high, low], alpha = alpha, kernel_size = (3 , 3), filters = [64, 64], stage = 2, block = 'b')
  
-    # x = conv_block(x, 3, [128, 128], stage=3, block='a')
-    # x = identity_block(x, 3, [128, 128], stage=3, block='b')
-
-    high, low = conv_block([high, low], alpha = alpha, kernel_size = (3 , 3), filters = [128, 128], stage = 3, block = 'a')
+    high, low = conv_block([high, low], alpha = alpha, kernel_size = (3 , 3), filters = [128, 128], stage = 3, block = 'a', strides = (2, 2))
     high, low = identity_block([high, low], alpha = alpha, kernel_size = (3 , 3), filters = [128, 128], stage = 3, block = 'b')
- 
-    # x = conv_block(x, 3, [256, 256], stage=4, block='a')
-    # x = identity_block(x, 3, [256, 256], stage=4, block='b')
 
-    high, low = conv_block([high, low], alpha = alpha, kernel_size = (3 , 3), filters = [256, 256], stage = 4, block = 'a')
+    high, low = conv_block([high, low], alpha = alpha, kernel_size = (3 , 3), filters = [256, 256], stage = 4, block = 'a', strides = (2, 2))
     high, low = identity_block([high, low], alpha = alpha, kernel_size = (3 , 3), filters = [256, 256], stage = 4, block = 'b')
- 
-    # x = conv_block(x, 3, [512, 512], stage=5, block='a')
-    # x = identity_block(x, 3, [512, 512], stage=5, block='b')
 
-    high, low = conv_block([high, low], alpha = alpha, kernel_size = (3 , 3), filters = [512, 512], stage = 5, block = 'a')
+    high, low = conv_block([high, low], alpha = alpha, kernel_size = (3 , 3), filters = [512, 512], stage = 5, block = 'a', strides = (2, 2))
     high, low = identity_block([high, low], alpha = alpha, kernel_size = (3 , 3), filters = [512, 512], stage = 5, block = 'b')
     x = last_OctConv_2_Vanila([high, low], filters = 512, alpha = alpha)
  
@@ -258,6 +216,3 @@ def Oct_ResNet18(include_top = False,
     #                           'your Keras config '
     #                           'at ~/.keras/keras.json.')
     return model
-
-#model = Oct_ResNet18(input_shape = (128, 128, 3), alpha = 0.25, pooling = 'avg', classes = 6)
-#model.summary()
